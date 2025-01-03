@@ -1,0 +1,3 @@
+// Configurações do Supabase
+const supabaseUrl = 'https://cvlhkduzanwinkcegdst.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2bGhrZHV6YW53aW5rY2VnZHN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU4NDQ2MzksImV4cCI6MjA1MTQyMDYzOX0.hNGENjWE-oTtV5POoN1mdEzZnjOi4eT-d4AGsll_FCU';

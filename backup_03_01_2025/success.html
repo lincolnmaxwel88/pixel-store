@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compra Realizada - Pixel Store</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.1"></script>
+</head>
+<body>
+    <header>
+        <div class="logo">Pixel Store</div>
+        <a href="/" class="button">Voltar para Home</a>
+    </header>
+
+    <main>
+        <div class="success-message">
+            <h1>Compra Realizada com Sucesso!</h1>
+            <p>Agora você pode adicionar um link para seus pixels.</p>
+            <div id="linkForm">
+                <input type="url" id="linkInput" placeholder="https://..." required>
+                <button id="saveLinkButton">Salvar Link</button>
+                <button id="skipButton">Pular</button>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Pixel Store. Todos os direitos reservados.</p>
+    </footer>
+
+    <script type="module" src="success-config.js"></script>
+    <script type="module" src="success-pixels.js"></script>
+</body>
+</html>

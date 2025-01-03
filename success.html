@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagamento Realizado - Pixel Store</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="success-config.js"></script>
+    <script src="success-pixels.js"></script>
+</head>
+<body>
+    <div class="success-page">
+        <h1>Pagamento Realizado com Sucesso!</h1>
+        <div class="loading-spinner"></div>
+        <p>Estamos processando sua compra...</p>
+        <p>Você será redirecionado automaticamente em alguns instantes.</p>
+        <p class="small">Se não for redirecionado, <a href="/" class="button">clique aqui</a></p>
+    </div>
+    <script>
+        // Inicializar cliente Supabase
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true,
+                storage: window.localStorage,
+                storageKey: 'pixel-store-auth',
+                flowType: 'implicit'
+            }
+        });
+
+        // Função para carregar imagem
+        function loadImage(file) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        // Função para redimensionar imagem
+        async function resizeImage(img, width, height) {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            return new Promise((resolve) => {
+                canvas.toBlob(resolve, 'image/png');
+            });
+        }
+
+        // Função para fazer upload da imagem
+        async function uploadImage(file) {
+            try {
+                // Primeiro, tenta listar os buckets para debug
+                const { data: buckets, error: bucketsError } = await supabase
+                    .storage
+                    .listBuckets();
+                
+                console.log('Buckets disponíveis:', buckets);
+                if (bucketsError) {
+                    console.error('Erro ao listar buckets:', bucketsError);
+                    throw bucketsError;
+                }
+
+                // Tenta fazer o upload usando o primeiro bucket disponível
+                if (buckets && buckets.length > 0) {
+                    const bucketName = buckets[0].name;
+                    console.log('Usando bucket:', bucketName);
+                    
+                    const { data, error } = await supabase.storage
+                        .from(bucketName)
+                        .upload(`${Date.now()}-${file.name}`, file, {
+                            cacheControl: '3600',
+                            upsert: false,
+                            contentType: 'image/png'
+                        });
+
+                    if (error) {
+                        console.error('Erro no upload:', error);
+                        throw error;
+                    }
+
+                    return data;
+                } else {
+                    throw new Error('Nenhum bucket disponível');
+                }
+            } catch (error) {
+                console.error('Erro detalhado no upload:', error);
+                throw error;
+            }
+        }
+
+        // Função para verificar o status do pagamento e finalizar a compra
+        async function checkPaymentAndFinalizePurchase(sessionId) {
+            console.log('Iniciando verificação de pagamento...', sessionId);
+            try {
+                const response = await fetch(`http://localhost:3001/check-payment/${sessionId}`);
+                const data = await response.json();
+                console.log('Status do pagamento:', data);
+
+                if (data.status === 'paid') {
+                    console.log('Pagamento confirmado, recuperando dados da compra...');
+                    const purchaseInfoStr = localStorage.getItem('pendingPurchase');
+                    console.log('Dados da compra:', purchaseInfoStr);
+                    
+                    if (!purchaseInfoStr) {
+                        throw new Error('Informações da compra não encontradas');
+                    }
+
+                    const purchaseInfo = JSON.parse(purchaseInfoStr);
+                    console.log('Dados da compra parseados:', purchaseInfo);
+
+                    // Registrar compra no banco
+                    console.log('Registrando compra...');
+                    
+                    // Buscar o preço atual por pixel
+                    const { data: settings, error: settingsError } = await supabase
+                        .from('settings')
+                        .select('*')
+                        .limit(1)
+                        .single();
+
+                    if (settingsError) {
+                        console.error('Erro ao buscar preço por pixel:', settingsError);
+                        throw settingsError;
+                    }
+
+                    console.log('Settings:', settings);
+                    const currentPricePerPixel = parseFloat(settings.value) || 0.01;
+                    console.log('Preço por pixel atual:', currentPricePerPixel);
+
+                    const { data: purchase, error: purchaseError } = await supabase
+                        .from('purchases')
+                        .insert([
+                            {
+                                user_id: purchaseInfo.userId,
+                                x: purchaseInfo.x,
+                                y: purchaseInfo.y,
+                                width: purchaseInfo.width,
+                                height: purchaseInfo.height,
+                                image_data: purchaseInfo.imageBase64,
+                                pixel_count: purchaseInfo.pixelCount,
+                                total_value: purchaseInfo.totalValue,
+                                payment_id: sessionId,
+                                price_per_pixel: currentPricePerPixel
+                            }
+                        ])
+                        .select();
+
+                    if (purchaseError) {
+                        console.error('Erro ao registrar compra:', purchaseError);
+                        throw purchaseError;
+                    }
+
+                    console.log('Compra registrada com sucesso:', purchase);
+
+                    // Registrar na tabela pixels
+                    console.log('Registrando pixels...');
+                    const { data: pixels, error: pixelsError } = await supabase
+                        .from('pixels')
+                        .insert([
+                            {
+                                user_id: purchaseInfo.userId,
+                                x: purchaseInfo.x,
+                                y: purchaseInfo.y,
+                                width: purchaseInfo.width,
+                                height: purchaseInfo.height,
+                                image_url: purchaseInfo.imageBase64,
+                                created_at: new Date().toISOString()
+                            }
+                        ])
+                        .select();
+
+                    if (pixelsError) {
+                        console.error('Erro ao registrar pixels:', pixelsError);
+                        throw pixelsError;
+                    }
+
+                    console.log('Pixels registrados com sucesso:', pixels);
+
+                    // Limpar dados temporários
+                    localStorage.removeItem('pendingPurchase');
+
+                    // Recarregar a página principal
+                    window.location.href = '/';
+                }
+            } catch (error) {
+                console.error('Erro detalhado ao finalizar compra:', error);
+                document.querySelector('.loading-spinner').style.display = 'none';
+                document.querySelector('h1').textContent = 'Erro ao finalizar compra';
+                document.querySelector('p').textContent = 'Contate o suporte.';
+            }
+        }
+
+        // Verificar se é uma página de sucesso de pagamento
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Verificando página atual:', window.location.pathname);
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionId = urlParams.get('session_id');
+            console.log('Session ID:', sessionId);
+            if (sessionId) {
+                checkPaymentAndFinalizePurchase(sessionId);
+            }
+        });
+    </script>
+</body>
+</html>
