@@ -41,6 +41,31 @@ let purchasesModal;
 let linkModal;
 let linkInput;
 
+// Botao flutuante Selecionar Imagem
+document.addEventListener("click", (event) => {
+    // Captura o botão
+    const button = document.getElementById("floatingImageButton");
+
+    // Atualiza a posição do botão com base nas coordenadas do clique
+    button.style.left = `${event.pageX}px`;
+    button.style.top = `${event.pageY}px`;
+
+    // Exibe o botão
+    button.style.display = "block";
+});
+
+// Botao flutuante comprar
+document.addEventListener("click", (event) => {
+    const buyButton = document.getElementById("buyButton");
+
+    // Atualiza a posição do botão com base nas coordenadas do clique
+    buyButton.style.left = `${event.clientX}px`;
+    buyButton.style.top = `${event.clientY}px`;
+
+    // Exibe o botão
+    buyButton.style.display = "block";
+});
+
 // Inicialização
 async function initialize() {
     try {
@@ -1145,33 +1170,34 @@ function markPixelsAsPurchased(left, top, width, height) {
 
 // Funções do box de informações
 function updateInfoBox() {
-    const selectedCount = selectedPixels.length;
-    const totalValue = (selectedCount * currentPixelPrice).toFixed(2);
-    
-    console.log('Atualizando info box:', { 
-        selectedCount, 
-        totalValue, 
-        currentPixelPrice,
-        selectedPixels 
+    if (!infoBox) return;
+
+    // Calcular número total de pixels na seleção
+    let totalPixels = 0;
+    selectedPixels.forEach(selection => {
+        // Dividir por 100 para corrigir a exibição
+        totalPixels += Math.floor((selection.width * selection.height) / 100);
     });
+    
+    // Como cada pixel custa R$ 1,00, o total é igual ao número de pixels
+    const total = totalPixels * currentPixelPrice;
 
-    document.getElementById('selectedPixelsCount').textContent = selectedCount;
-    document.getElementById('totalValue').textContent = totalValue;
+    selectedPixelsCount.textContent = totalPixels;
+    totalValue.textContent = `R$ ${total.toFixed(2)}`;
 
-    const infoBox = document.getElementById('infoBox');
-    if (selectedCount > 0) {
-        infoBox.classList.add('visible');
+    if (totalPixels > 0) {
+        infoBox.classList.add('show');
     } else {
-        infoBox.classList.remove('visible');
+        infoBox.classList.remove('show');
     }
 }
 
 function showInfoBox() {
-    infoBox.classList.add('visible');
+    infoBox.classList.add('show');
 }
 
 function hideInfoBox() {
-    infoBox.classList.remove('visible');
+    infoBox.classList.remove('show');
 }
 
 // Verificar estado de autenticação
@@ -1461,31 +1487,28 @@ function handleTouchStart(e) {
     e.preventDefault();
     const touch = e.touches[0];
     const rect = grid.getBoundingClientRect();
+    const scale = rect.width / GRID_WIDTH; // Calcula a escala atual do grid
     
-    // Calcula a escala real do grid
-    const scaleX = GRID_WIDTH / rect.width;
-    const scaleY = GRID_HEIGHT / rect.height;
+    // Ajusta as coordenadas com base na escala
+    const x = (touch.clientX - rect.left) / scale;
+    const y = (touch.clientY - rect.top) / scale;
     
-    // Ajusta as coordenadas considerando a escala
-    const x = (touch.clientX - rect.left) * scaleX;
-    const y = (touch.clientY - rect.top) * scaleY;
-    
-    // Arredonda para o pixel mais próximo
     startX = Math.floor(x / PIXEL_SIZE) * PIXEL_SIZE;
     startY = Math.floor(y / PIXEL_SIZE) * PIXEL_SIZE;
     
-    // Limita as coordenadas ao grid
-    startX = Math.max(0, Math.min(startX, GRID_WIDTH - PIXEL_SIZE));
-    startY = Math.max(0, Math.min(startY, GRID_HEIGHT - PIXEL_SIZE));
-    
     isSelecting = true;
+    selectedPixels = [];
     
-    // Marca o pixel inicial como selecionado
-    selectedPixels = [{ x: startX, y: startY }];
+    // Criar caixa de seleção inicial
+    const selectionBox = document.createElement('div');
+    selectionBox.className = 'selection-box';
+    selectionBox.style.left = startX + 'px';
+    selectionBox.style.top = startY + 'px';
+    selectionBox.style.width = PIXEL_SIZE + 'px';
+    selectionBox.style.height = PIXEL_SIZE + 'px';
+    grid.appendChild(selectionBox);
     
-    // Atualiza a visualização
-    updatePixelSelection();
-    showFloatingButtons();
+    showInfoBox();
 }
 
 function handleTouchMove(e) {
@@ -1494,28 +1517,30 @@ function handleTouchMove(e) {
     
     const touch = e.touches[0];
     const rect = grid.getBoundingClientRect();
+    const scale = rect.width / GRID_WIDTH;
     
-    // Calcula a escala real do grid
-    const scaleX = GRID_WIDTH / rect.width;
-    const scaleY = GRID_HEIGHT / rect.height;
-    
-    // Ajusta as coordenadas considerando a escala
-    const currentX = (touch.clientX - rect.left) * scaleX;
-    const currentY = (touch.clientY - rect.top) * scaleY;
-    
-    // Arredonda para o pixel mais próximo
-    const endX = Math.floor(currentX / PIXEL_SIZE) * PIXEL_SIZE;
-    const endY = Math.floor(currentY / PIXEL_SIZE) * PIXEL_SIZE;
+    // Ajusta as coordenadas com base na escala
+    const currentX = (touch.clientX - rect.left) / scale;
+    const currentY = (touch.clientY - rect.top) / scale;
     
     // Limita as coordenadas ao grid
-    const boundedEndX = Math.max(0, Math.min(endX, GRID_WIDTH - PIXEL_SIZE));
-    const boundedEndY = Math.max(0, Math.min(endY, GRID_HEIGHT - PIXEL_SIZE));
+    const boundedX = Math.max(0, Math.min(currentX, GRID_WIDTH));
+    const boundedY = Math.max(0, Math.min(currentY, GRID_HEIGHT));
     
     // Calcula a área de seleção
-    const left = Math.min(startX, boundedEndX);
-    const top = Math.min(startY, boundedEndY);
-    const right = Math.max(startX, boundedEndX) + PIXEL_SIZE;
-    const bottom = Math.max(startY, boundedEndY) + PIXEL_SIZE;
+    const left = Math.min(startX, Math.floor(boundedX / PIXEL_SIZE) * PIXEL_SIZE);
+    const top = Math.min(startY, Math.floor(boundedY / PIXEL_SIZE) * PIXEL_SIZE);
+    const right = Math.max(startX, Math.ceil(boundedX / PIXEL_SIZE) * PIXEL_SIZE);
+    const bottom = Math.max(startY, Math.ceil(boundedY / PIXEL_SIZE) * PIXEL_SIZE);
+    
+    // Atualiza a caixa de seleção
+    const selectionBox = grid.querySelector('.selection-box');
+    if (selectionBox) {
+        selectionBox.style.left = left + 'px';
+        selectionBox.style.top = top + 'px';
+        selectionBox.style.width = (right - left) + 'px';
+        selectionBox.style.height = (bottom - top) + 'px';
+    }
     
     // Atualiza os pixels selecionados
     selectedPixels = [];
@@ -1527,8 +1552,6 @@ function handleTouchMove(e) {
         }
     }
     
-    // Atualiza a visualização
-    updatePixelSelection();
     updateInfoBox();
 }
 
@@ -1538,7 +1561,13 @@ function handleTouchEnd(e) {
     
     isSelecting = false;
     
-    // Mantém os pixels selecionados
+    // Remove a caixa de seleção
+    const selectionBox = grid.querySelector('.selection-box');
+    if (selectionBox) {
+        selectionBox.remove();
+    }
+    
+    // Se houver pixels selecionados, mostra os botões flutuantes
     if (selectedPixels.length > 0) {
         showFloatingButtons();
     } else {
@@ -1548,40 +1577,20 @@ function handleTouchEnd(e) {
     updateInfoBox();
 }
 
-// Função para atualizar a visualização dos pixels selecionados
-function updatePixelSelection() {
-    // Remove todas as seleções anteriores
-    const oldSelections = grid.querySelectorAll('.pixel-selection');
-    oldSelections.forEach(el => el.remove());
-    
-    // Adiciona as novas seleções
-    selectedPixels.forEach(pixel => {
-        const selection = document.createElement('div');
-        selection.className = 'pixel-selection';
-        selection.style.left = pixel.x + 'px';
-        selection.style.top = pixel.y + 'px';
-        selection.style.width = PIXEL_SIZE + 'px';
-        selection.style.height = PIXEL_SIZE + 'px';
-        grid.appendChild(selection);
-    });
-
-    // Atualiza o info box com os novos valores
-    updateInfoBox();
-}
-
-// Adiciona estilos CSS para a seleção de pixels
+// Adiciona estilos CSS para a caixa de seleção
 const style = document.createElement('style');
 style.textContent = `
-    .pixel-selection {
+    .selection-box {
         position: absolute;
         border: 2px solid #007bff;
         background-color: rgba(0, 123, 255, 0.2);
         pointer-events: none;
         z-index: 1000;
+        transform-origin: top left;
     }
     
     @media (max-width: 768px) {
-        .pixel-selection {
+        .selection-box {
             border-width: 1px;
         }
     }

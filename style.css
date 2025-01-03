@@ -436,17 +436,20 @@ form a:hover {
     background-color: #0056b3;
 }
 
-.floating-buttons {
+#floatingImageButton {
     position: absolute;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    z-index: 100;
+    transform: translate(-50%, -50%); /* Centraliza o botão no ponto de clique */
+    z-index: 100; /* Garante que o botão fique acima de outros elementos */
+    display: none; /* Inicialmente oculto */
 }
+
 
 #floatingImageButton,
 #floatingLinkButton,
 #buyButton {
+    position: absolute; /* Necessário para permitir posicionamento dinâmico */
+    transform: translate(-50%, -50%); /* Centraliza no ponto de clique */
+    z-index: 100; /* Garante que fique acima de outros elementos */
     padding: 10px 16px;
     background-color: #28a745;
     color: white;
@@ -455,8 +458,8 @@ form a:hover {
     cursor: pointer;
     font-size: 14px;
     transition: all 0.2s ease;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    margin: 0 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    display: none; /* Inicialmente oculto */
 }
 
 #floatingImageButton:hover,
