@@ -19,6 +19,8 @@ let currentUser = null;
 let currentImageFile = null;
 let editingPixelId = null;
 let currentPixelPrice = 0.10; // Valor padrão
+let touchStartX, touchStartY; // Novas variáveis para touch
+let isTouching = false; // Flag para controle de toque
 
 // Elementos do DOM
 let grid;
@@ -348,6 +350,9 @@ function setupEventListeners() {
         grid.addEventListener('mousedown', handleMouseDown);
         grid.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
+        grid.addEventListener('touchstart', handleTouchStart, { passive: false });
+        grid.addEventListener('touchmove', handleTouchMove, { passive: false });
+        grid.addEventListener('touchend', handleTouchEnd, { passive: false });
     }
 
     // Manipulação de imagem
@@ -1140,34 +1145,33 @@ function markPixelsAsPurchased(left, top, width, height) {
 
 // Funções do box de informações
 function updateInfoBox() {
-    if (!infoBox) return;
-
-    // Calcular número total de pixels na seleção
-    let totalPixels = 0;
-    selectedPixels.forEach(selection => {
-        // Dividir por 100 para corrigir a exibição
-        totalPixels += Math.floor((selection.width * selection.height) / 100);
-    });
+    const selectedCount = selectedPixels.length;
+    const totalValue = (selectedCount * currentPixelPrice).toFixed(2);
     
-    // Como cada pixel custa R$ 1,00, o total é igual ao número de pixels
-    const total = totalPixels * currentPixelPrice;
+    console.log('Atualizando info box:', { 
+        selectedCount, 
+        totalValue, 
+        currentPixelPrice,
+        selectedPixels 
+    });
 
-    selectedPixelsCount.textContent = totalPixels;
-    totalValue.textContent = `R$ ${total.toFixed(2)}`;
+    document.getElementById('selectedPixelsCount').textContent = selectedCount;
+    document.getElementById('totalValue').textContent = totalValue;
 
-    if (totalPixels > 0) {
-        infoBox.classList.add('show');
+    const infoBox = document.getElementById('infoBox');
+    if (selectedCount > 0) {
+        infoBox.classList.add('visible');
     } else {
-        infoBox.classList.remove('show');
+        infoBox.classList.remove('visible');
     }
 }
 
 function showInfoBox() {
-    infoBox.classList.add('show');
+    infoBox.classList.add('visible');
 }
 
 function hideInfoBox() {
-    infoBox.classList.remove('show');
+    infoBox.classList.remove('visible');
 }
 
 // Verificar estado de autenticação
@@ -1452,54 +1456,137 @@ async function updatePurchaseModal() {
     }
 }
 
-// Função para carregar os pixels comprados
-async function loadPurchasedPixels() {
-    try {
-        // Carregar da tabela purchases
-        const { data: purchases, error: purchasesError } = await supabase
-            .from('purchases')
-            .select('*');
-
-        if (purchasesError) {
-            console.error('Erro ao carregar purchases:', purchasesError);
-            return;
-        }
-
-        // Carregar da tabela pixels
-        const { data: pixels, error: pixelsError } = await supabase
-            .from('pixels')
-            .select('*');
-
-        if (pixelsError) {
-            console.error('Erro ao carregar pixels:', pixelsError);
-            return;
-        }
-
-        // Desenhar pixels da tabela purchases
-        purchases.forEach(purchase => {
-            if (purchase.image_data) {
-                const img = new Image();
-                img.onload = function() {
-                    ctx.drawImage(img, purchase.x, purchase.y, purchase.width, purchase.height);
-                };
-                img.src = purchase.image_data;
-            }
-        });
-
-        // Desenhar pixels da tabela pixels
-        pixels.forEach(pixel => {
-            if (pixel.image_url) {
-                const img = new Image();
-                img.onload = function() {
-                    ctx.drawImage(img, pixel.x, pixel.y, pixel.width, pixel.height);
-                };
-                img.src = pixel.image_url;
-            }
-        });
-    } catch (error) {
-        console.error('Erro ao carregar pixels:', error);
-    }
+// Funções de eventos touch
+function handleTouchStart(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = grid.getBoundingClientRect();
+    
+    // Calcula a escala real do grid
+    const scaleX = GRID_WIDTH / rect.width;
+    const scaleY = GRID_HEIGHT / rect.height;
+    
+    // Ajusta as coordenadas considerando a escala
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
+    
+    // Arredonda para o pixel mais próximo
+    startX = Math.floor(x / PIXEL_SIZE) * PIXEL_SIZE;
+    startY = Math.floor(y / PIXEL_SIZE) * PIXEL_SIZE;
+    
+    // Limita as coordenadas ao grid
+    startX = Math.max(0, Math.min(startX, GRID_WIDTH - PIXEL_SIZE));
+    startY = Math.max(0, Math.min(startY, GRID_HEIGHT - PIXEL_SIZE));
+    
+    isSelecting = true;
+    
+    // Marca o pixel inicial como selecionado
+    selectedPixels = [{ x: startX, y: startY }];
+    
+    // Atualiza a visualização
+    updatePixelSelection();
+    showFloatingButtons();
 }
+
+function handleTouchMove(e) {
+    if (!isSelecting) return;
+    e.preventDefault();
+    
+    const touch = e.touches[0];
+    const rect = grid.getBoundingClientRect();
+    
+    // Calcula a escala real do grid
+    const scaleX = GRID_WIDTH / rect.width;
+    const scaleY = GRID_HEIGHT / rect.height;
+    
+    // Ajusta as coordenadas considerando a escala
+    const currentX = (touch.clientX - rect.left) * scaleX;
+    const currentY = (touch.clientY - rect.top) * scaleY;
+    
+    // Arredonda para o pixel mais próximo
+    const endX = Math.floor(currentX / PIXEL_SIZE) * PIXEL_SIZE;
+    const endY = Math.floor(currentY / PIXEL_SIZE) * PIXEL_SIZE;
+    
+    // Limita as coordenadas ao grid
+    const boundedEndX = Math.max(0, Math.min(endX, GRID_WIDTH - PIXEL_SIZE));
+    const boundedEndY = Math.max(0, Math.min(endY, GRID_HEIGHT - PIXEL_SIZE));
+    
+    // Calcula a área de seleção
+    const left = Math.min(startX, boundedEndX);
+    const top = Math.min(startY, boundedEndY);
+    const right = Math.max(startX, boundedEndX) + PIXEL_SIZE;
+    const bottom = Math.max(startY, boundedEndY) + PIXEL_SIZE;
+    
+    // Atualiza os pixels selecionados
+    selectedPixels = [];
+    for (let y = top; y < bottom; y += PIXEL_SIZE) {
+        for (let x = left; x < right; x += PIXEL_SIZE) {
+            if (!hasAnyPurchasedPixelsInArea(x, y, PIXEL_SIZE, PIXEL_SIZE)) {
+                selectedPixels.push({ x, y });
+            }
+        }
+    }
+    
+    // Atualiza a visualização
+    updatePixelSelection();
+    updateInfoBox();
+}
+
+function handleTouchEnd(e) {
+    if (!isSelecting) return;
+    e.preventDefault();
+    
+    isSelecting = false;
+    
+    // Mantém os pixels selecionados
+    if (selectedPixels.length > 0) {
+        showFloatingButtons();
+    } else {
+        hideFloatingButtons();
+    }
+    
+    updateInfoBox();
+}
+
+// Função para atualizar a visualização dos pixels selecionados
+function updatePixelSelection() {
+    // Remove todas as seleções anteriores
+    const oldSelections = grid.querySelectorAll('.pixel-selection');
+    oldSelections.forEach(el => el.remove());
+    
+    // Adiciona as novas seleções
+    selectedPixels.forEach(pixel => {
+        const selection = document.createElement('div');
+        selection.className = 'pixel-selection';
+        selection.style.left = pixel.x + 'px';
+        selection.style.top = pixel.y + 'px';
+        selection.style.width = PIXEL_SIZE + 'px';
+        selection.style.height = PIXEL_SIZE + 'px';
+        grid.appendChild(selection);
+    });
+
+    // Atualiza o info box com os novos valores
+    updateInfoBox();
+}
+
+// Adiciona estilos CSS para a seleção de pixels
+const style = document.createElement('style');
+style.textContent = `
+    .pixel-selection {
+        position: absolute;
+        border: 2px solid #007bff;
+        background-color: rgba(0, 123, 255, 0.2);
+        pointer-events: none;
+        z-index: 1000;
+    }
+    
+    @media (max-width: 768px) {
+        .pixel-selection {
+            border-width: 1px;
+        }
+    }
+`;
+document.head.appendChild(style);
 
 // Carregar pixels ao iniciar
 document.addEventListener('DOMContentLoaded', () => {

@@ -47,6 +47,10 @@ footer {
     position: relative;
     background: #fff;
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
 }
 
 .pixel {
@@ -805,4 +809,57 @@ hr {
 
 .success-page .small a:hover {
     text-decoration: underline;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    #pixelGrid {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 4/3;
+        touch-action: none; /* Previne comportamentos padrão de toque */
+    }
+
+    .modal-content {
+        width: 95%;
+        padding: 16px;
+    }
+
+    /* Ajustes para melhor visualização em telas pequenas */
+    .info-box {
+        bottom: 60px;
+        right: 50%;
+        transform: translateX(50%);
+        width: 90%;
+        max-width: 300px;
+        background-color: rgba(255, 255, 255, 0.95);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        border-radius: 12px;
+        z-index: 1000;
+    }
+
+    .floating-buttons {
+        bottom: 10px;
+        width: 90%;
+        justify-content: center;
+        background-color: rgba(255, 255, 255, 0.95);
+        padding: 10px;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+
+    /* Melhorar área de toque para botões */
+    button {
+        min-height: 44px;
+        padding: 12px 20px;
+        margin: 4px;
+        font-size: 16px;
+    }
+
+    /* Ajuste para inputs em telas touch */
+    input {
+        min-height: 44px;
+        font-size: 16px;
+        padding: 8px 12px;
+    }
 }
