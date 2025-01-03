@@ -41,6 +41,19 @@ let purchasesModal;
 let linkModal;
 let linkInput;
 
+// Botao flutuante comprar
+document.addEventListener("click", (event) => {
+    const buyButton = document.getElementById("buyButton");
+
+    // Atualiza a posição do botão com base nas coordenadas do clique
+    buyButton.style.left = `${event.clientX}px`;
+    buyButton.style.top = `${event.clientY}px`;
+
+    // Exibe o botão
+    buyButton.style.display = "block";
+});
+
+
 // Botao flutuante Selecionar Imagem
 document.addEventListener("click", (event) => {
     // Captura o botão
@@ -53,18 +66,31 @@ document.addEventListener("click", (event) => {
     // Exibe o botão
     button.style.display = "block";
 });
-
-// Botao flutuante comprar
 document.addEventListener("click", (event) => {
+    const imageButton = document.getElementById("floatingImageButton");
     const buyButton = document.getElementById("buyButton");
 
-    // Atualiza a posição do botão com base nas coordenadas do clique
-    buyButton.style.left = `${event.clientX}px`;
-    buyButton.style.top = `${event.clientY}px`;
-
-    // Exibe o botão
-    buyButton.style.display = "block";
+    // Lógica para exibir apenas o botão apropriado
+    if (selectedPixels.length > 0 && !currentImageFile) {
+        // Caso: pixels selecionados, mas nenhuma imagem foi carregada
+        imageButton.style.left = `${event.pageX}px`;
+        imageButton.style.top = `${event.pageY}px`;
+        imageButton.style.display = "block";
+        buyButton.style.display = "none";
+    } else if (currentImageFile) {
+        // Caso: imagem já carregada
+        buyButton.style.left = `${event.pageX}px`;
+        buyButton.style.top = `${event.pageY}px`;
+        buyButton.style.display = "block";
+        imageButton.style.display = "none";
+    } else {
+        // Nenhuma condição atende (nenhum pixel selecionado)
+        imageButton.style.display = "none";
+        buyButton.style.display = "none";
+    }
 });
+
+
 
 // Inicialização
 async function initialize() {
