@@ -586,34 +586,26 @@ async function handleRegister(event) {
             throw profileError;
         }
         
-        // Login automático
-        const { data: { session }, error: signInError } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        });
+        // Mostrar mensagem de sucesso e instruções
+        alert('Cadastro realizado com sucesso! Um email de confirmação foi enviado para ' + email + '. Por favor, verifique sua caixa de entrada e confirme seu email antes de fazer login.');
         
-        if (signInError) {
-            throw signInError;
-        }
+        // Limpar formulário de registro
+        document.getElementById('registerForm').reset();
         
-        // Atualizar UI
-        alert('Registro realizado com sucesso!');
-        loginModal.classList.remove('show');
-        currentUser = user;
-        updateUIForLoggedUser({
-            first_name: firstName,
-            last_name: lastName,
-            email: email
-        });
+        // Mostrar formulário de login
+        document.getElementById('registerForm').style.display = 'none';
+        document.getElementById('loginForm').style.display = 'block';
         
     } catch (error) {
         console.error('Erro completo:', error);
-        alert('Erro no registro: ' + error.message);
         
         if (error.message.includes('já está cadastrado')) {
+            alert(error.message);
             // Mostrar formulário de login
             document.getElementById('registerForm').style.display = 'none';
             document.getElementById('loginForm').style.display = 'block';
+        } else {
+            alert('Erro no registro: ' + error.message);
         }
     }
 }
@@ -1605,83 +1597,4 @@ document.addEventListener('DOMContentLoaded', () => {
 // Carregar Stripe
 function loadStripe(key) {
     return window.Stripe(key);
-}
-
-// Função para registrar novo usuário
-async function registerUser(email, password, firstName, lastName) {
-    try {
-        const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-                data: {
-                    first_name: firstName,
-                    last_name: lastName
-                }
-            }
-        });
-
-        if (error) throw error;
-
-        // Criar perfil do usuário
-        const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([
-                {
-                    id: data.user.id,
-                    first_name: firstName,
-                    last_name: lastName,
-                    email: email,
-                    admin: false
-                }
-            ]);
-
-        if (profileError) throw profileError;
-
-        // Mostrar mensagem de sucesso com Toastify
-        Toastify({
-            text: "Cadastro realizado com sucesso! Um email de confirmação foi enviado para sua caixa de entrada.",
-            duration: 5000,
-            gravity: "top",
-            position: "center",
-            style: {
-                background: "#28a745",
-            }
-        }).showToast();
-
-        // Aguardar 2 segundos antes de mudar para o formulário de login
-        setTimeout(() => {
-            showLoginForm();
-        }, 2000);
-
-    } catch (error) {
-        console.error('Erro no registro:', error);
-        Toastify({
-            text: error.message || "Erro ao criar conta",
-            duration: 3000,
-            gravity: "top",
-            position: "center",
-            style: {
-                background: "#dc3545",
-            }
-        }).showToast();
-    }
-}
-
-// Função para mostrar o formulário de login
-function showLoginForm() {
-    const loginForm = document.getElementById('loginForm');
-    const registerForm = document.getElementById('registerForm');
-    
-    if (loginForm && registerForm) {
-        registerForm.style.display = 'none';
-        loginForm.style.display = 'block';
-        
-        // Limpar os campos do formulário de registro
-        document.getElementById('registerEmail').value = '';
-        document.getElementById('registerPassword').value = '';
-        document.getElementById('confirmPassword').value = '';
-        document.getElementById('registerFirstName').value = '';
-        document.getElementById('registerLastName').value = '';
-    }
 }
