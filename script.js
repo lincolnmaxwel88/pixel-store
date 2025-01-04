@@ -1606,3 +1606,82 @@ document.addEventListener('DOMContentLoaded', () => {
 function loadStripe(key) {
     return window.Stripe(key);
 }
+
+// Função para registrar novo usuário
+async function registerUser(email, password, firstName, lastName) {
+    try {
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: {
+                    first_name: firstName,
+                    last_name: lastName
+                }
+            }
+        });
+
+        if (error) throw error;
+
+        // Criar perfil do usuário
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .insert([
+                {
+                    id: data.user.id,
+                    first_name: firstName,
+                    last_name: lastName,
+                    email: email,
+                    admin: false
+                }
+            ]);
+
+        if (profileError) throw profileError;
+
+        // Mostrar mensagem de sucesso com Toastify
+        Toastify({
+            text: "Cadastro realizado com sucesso! Um email de confirmação foi enviado para sua caixa de entrada.",
+            duration: 5000,
+            gravity: "top",
+            position: "center",
+            style: {
+                background: "#28a745",
+            }
+        }).showToast();
+
+        // Aguardar 2 segundos antes de mudar para o formulário de login
+        setTimeout(() => {
+            showLoginForm();
+        }, 2000);
+
+    } catch (error) {
+        console.error('Erro no registro:', error);
+        Toastify({
+            text: error.message || "Erro ao criar conta",
+            duration: 3000,
+            gravity: "top",
+            position: "center",
+            style: {
+                background: "#dc3545",
+            }
+        }).showToast();
+    }
+}
+
+// Função para mostrar o formulário de login
+function showLoginForm() {
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    
+    if (loginForm && registerForm) {
+        registerForm.style.display = 'none';
+        loginForm.style.display = 'block';
+        
+        // Limpar os campos do formulário de registro
+        document.getElementById('registerEmail').value = '';
+        document.getElementById('registerPassword').value = '';
+        document.getElementById('confirmPassword').value = '';
+        document.getElementById('registerFirstName').value = '';
+        document.getElementById('registerLastName').value = '';
+    }
+}
