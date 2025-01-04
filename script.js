@@ -1426,86 +1426,59 @@ function hideLinkModal() {
 }
 
 // Atualizar UI para usuário logado
-function updateUIForLoggedUser(profile) {
-    // Atualizar todos os elementos com a classe user-name
-    document.querySelectorAll('.user-name').forEach(element => {
-        element.textContent = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
-    });
+async function updateUIForLoggedUser(user) {
+    try {
+        // Buscar perfil do usuário
+        const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single();
 
-    // Atualizar todos os elementos com a classe user-email
-    document.querySelectorAll('.user-email').forEach(element => {
-        element.textContent = profile.email;
-    });
+        if (error) throw error;
 
-    // Mostrar menu do usuário
-    userMenu.style.display = 'block';
+        // Atualizar menu do usuário
+        const userMenu = document.querySelector('.user-menu');
+        const loginButton = document.querySelector('.login-button');
+        const userName = document.querySelector('.user-name');
+        const userEmail = document.querySelector('.user-email');
+        const adminSettingsButton = document.querySelector('.admin-settings-button');
 
-    // Esconder botão de login
-    loginButton.style.display = 'none';
+        if (userMenu && loginButton && userName && userEmail) {
+            loginButton.style.display = 'none';
+            userMenu.style.display = 'block';
+            userName.textContent = `${profile.first_name} ${profile.last_name}`;
+            userEmail.textContent = user.email;
+
+            // Exibir ou ocultar botão de Admin Settings baseado no perfil
+            if (adminSettingsButton) {
+                adminSettingsButton.style.display = profile.admin ? 'block' : 'none';
+            }
+        }
+
+        currentUser = user;
+    } catch (error) {
+        console.error('Erro ao atualizar UI:', error);
+    }
 }
 
 // Atualizar UI para usuário deslogado
 function updateUIForLoggedOutUser() {
-    // Limpar informações do usuário
-    document.querySelectorAll('.user-name').forEach(element => {
-        element.textContent = '';
-    });
-    document.querySelectorAll('.user-email').forEach(element => {
-        element.textContent = '';
-    });
+    const userMenu = document.querySelector('.user-menu');
+    const loginButton = document.querySelector('.login-button');
+    const adminSettingsButton = document.querySelector('.admin-settings-button');
 
-    // Esconder menu do usuário
-    userMenu.style.display = 'none';
-
-    // Mostrar botão de login
-    loginButton.style.display = 'block';
-}
-
-// Atualizar o modal de compras
-async function updatePurchaseModal() {
-    if (!selectedArea) return;
-
-    const width = selectedArea.width;
-    const height = selectedArea.height;
-    const pixelCount = width * height;
-    
-    // Buscar o preço por pixel atual do Supabase
-    const { data: settings, error } = await supabase
-        .from('admin_settings')
-        .select('price_per_pixel')
-        .single();
-    
-    if (error) {
-        console.error('Erro ao buscar preço por pixel:', error);
-        return;
+    if (userMenu && loginButton) {
+        loginButton.style.display = 'block';
+        userMenu.style.display = 'none';
     }
-    
-    const pricePerPixel = settings.price_per_pixel || 0.01;
-    const totalValue = (pixelCount * pricePerPixel).toFixed(2);
-    
-    document.getElementById('pixelCount').textContent = pixelCount;
-    document.getElementById('totalValue').textContent = `$${totalValue}`;
-    
-    // Armazenar os dados da compra com o preço por pixel atual
-    const purchaseInfo = {
-        userId: (await supabase.auth.getUser()).data.user.id,
-        x: selectedArea.x,
-        y: selectedArea.y,
-        width: selectedArea.width,
-        height: selectedArea.height,
-        pixelCount,
-        totalValue: parseFloat(totalValue),
-        pricePerPixel: pricePerPixel
-    };
-    
-    if (selectedImage) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            purchaseInfo.imageBase64 = e.target.result;
-            localStorage.setItem('pendingPurchase', JSON.stringify(purchaseInfo));
-        };
-        reader.readAsDataURL(selectedImage);
+
+    // Garantir que o botão de Admin Settings esteja oculto
+    if (adminSettingsButton) {
+        adminSettingsButton.style.display = 'none';
     }
+
+    currentUser = null;
 }
 
 // Funções de eventos touch
