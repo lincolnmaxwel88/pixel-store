@@ -134,6 +134,26 @@ async function initialize() {
         // Verificar autenticação
         await checkAuthState();
 
+        // Configurar listener de mudança de autenticação
+        supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log('Auth state changed:', event, session);
+            if (event === 'SIGNED_IN') {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const { data: profiles } = await supabase
+                        .from('profiles')
+                        .select('*')
+                        .eq('id', user.id);
+                    
+                    if (profiles && profiles.length > 0) {
+                        updateUIForLoggedUser(profiles[0]);
+                    }
+                }
+            } else if (event === 'SIGNED_OUT') {
+                updateUIForLoggedOutUser();
+            }
+        });
+
         // Carregar imagens existentes
         await loadExistingImages();
 
@@ -1259,10 +1279,11 @@ async function checkAuthState() {
         }
 
         console.log('Perfil encontrado:', profile);
-        
+
         // Atualizar UI com os dados do perfil
         currentUser = user;
         updateUIForLoggedUser(profile);
+        
     } catch (error) {
         console.error('Erro ao verificar estado:', error);
         updateUIForLoggedOutUser();

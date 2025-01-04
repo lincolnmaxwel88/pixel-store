@@ -12,7 +12,12 @@ export const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON
         detectSessionInUrl: true,
         storage: window.localStorage,
         storageKey: 'pixel-store-auth',
-        flowType: 'implicit'
+        flowType: 'pkce'
+    },
+    global: {
+        headers: {
+            'Cache-Control': 'no-store'
+        }
     }
 });
 
