@@ -393,12 +393,12 @@ function setupEventListeners() {
 
     // Login form
     if (loginForm) {
-        loginForm.addEventListener('submit', handleLogin);
+        loginForm.addEventListener('submit', handleLoginSubmit);
     }
 
     // Register form
     if (registerForm) {
-        registerForm.addEventListener('submit', handleRegister);
+        registerForm.addEventListener('submit', handleRegisterSubmit);
     }
 
     // Grid event listeners
@@ -478,169 +478,15 @@ function setupUserMenuEvents() {
     }
 }
 
-// Handlers de formulário
-async function handleLogin(event) {
-    event.preventDefault();
-    
-    const email = document.getElementById('loginEmail').value;
-    const password = document.getElementById('loginPassword').value;
-    
-    try {
-        console.log('Iniciando login...');
-        
-        // Fazer login
-        const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        });
-        
-        if (signInError) throw signInError;
-        
-        console.log('Login bem sucedido:', user);
-
-        // Buscar o perfil pelo email (mais confiável que o ID neste caso)
-        const { data: profiles, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('email', email);
-
-        if (profileError) {
-            console.error('Erro ao buscar perfil:', profileError);
-            throw profileError;
-        }
-
-        const profile = profiles && profiles[0];
-        
-        if (!profile) {
-            console.error('Perfil não encontrado para email:', email);
-            throw new Error('Perfil não encontrado. Por favor, contate o suporte.');
-        }
-
-        console.log('Perfil encontrado:', profile);
-
-        // Atualizar UI
-        currentUser = user;
-        loginModal.classList.remove('show');
-        updateUIForLoggedUser(profile);
-        
-    } catch (error) {
-        console.error('Erro no login:', error);
-        alert('Erro no login: ' + error.message);
-    }
+// Função para alternar entre formulários de login e registro
+function showLoginForm() {
+    document.getElementById('registerForm').style.display = 'none';
+    document.getElementById('loginForm').style.display = 'block';
 }
 
-async function handleRegister(event) {
-    event.preventDefault();
-    
-    const firstName = document.getElementById('registerFirstName').value;
-    const lastName = document.getElementById('registerLastName').value;
-    const email = document.getElementById('registerEmail').value;
-    const password = document.getElementById('registerPassword').value;
-    const confirmPassword = document.getElementById('confirmPassword').value;
-    
-    if (password !== confirmPassword) {
-        alert('As senhas não coincidem.');
-        return;
-    }
-    
-    try {
-        console.log('Iniciando registro...');
-        
-        // Verificar se já existe um perfil com este email
-        const { data: existingProfiles } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('email', email);
-            
-        if (existingProfiles && existingProfiles.length > 0) {
-            throw new Error('Este email já está cadastrado. Por favor, faça login.');
-        }
-        
-        // Registrar o usuário
-        const { data: { user }, error: signUpError } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-                data: {
-                    first_name: firstName,
-                    last_name: lastName
-                }
-            }
-        });
-        
-        if (signUpError) {
-            throw signUpError;
-        }
-        
-        console.log('Usuário criado:', user);
-            
-        // Inserir o perfil
-        const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([
-                {
-                    id: user.id,
-                    email: email,
-                    first_name: firstName,
-                    last_name: lastName
-                }
-            ]);
-        
-        if (profileError) {
-            console.error('Erro ao criar perfil:', profileError);
-            throw profileError;
-        }
-        
-        // Login automático
-        const { data: { session }, error: signInError } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        });
-        
-        if (signInError) {
-            throw signInError;
-        }
-        
-        // Atualizar UI
-        alert('Registro realizado com sucesso!');
-        loginModal.classList.remove('show');
-        currentUser = user;
-        updateUIForLoggedUser({
-            first_name: firstName,
-            last_name: lastName,
-            email: email
-        });
-        
-    } catch (error) {
-        console.error('Erro completo:', error);
-        alert('Erro no registro: ' + error.message);
-        
-        if (error.message.includes('já está cadastrado')) {
-            // Mostrar formulário de login
-            document.getElementById('registerForm').style.display = 'none';
-            document.getElementById('loginForm').style.display = 'block';
-        }
-    }
-}
-
-// Função para mostrar mensagem de sucesso
-function showSuccessMessage(message) {
-    Swal.fire({
-        title: 'Sucesso!',
-        text: message,
-        icon: 'success',
-        confirmButtonText: 'OK'
-    });
-}
-
-// Função para mostrar mensagem de erro
-function showErrorMessage(message) {
-    Swal.fire({
-        title: 'Erro',
-        text: message,
-        icon: 'error',
-        confirmButtonText: 'OK'
-    });
+function showRegisterForm() {
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('registerForm').style.display = 'block';
 }
 
 // Manipular envio do formulário de registro
@@ -654,7 +500,12 @@ async function handleRegisterSubmit(event) {
     const confirmPassword = document.getElementById('confirmPassword').value;
 
     if (password !== confirmPassword) {
-        showErrorMessage('As senhas não coincidem');
+        await Swal.fire({
+            title: 'Erro',
+            text: 'As senhas não coincidem',
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
         return;
     }
 
@@ -672,6 +523,9 @@ async function handleRegisterSubmit(event) {
 
         if (error) throw error;
 
+        // Limpar formulário
+        document.getElementById('registerForm').reset();
+
         // Mostrar mensagem de sucesso e instruções
         await Swal.fire({
             title: 'Cadastro Realizado!',
@@ -680,14 +534,16 @@ async function handleRegisterSubmit(event) {
             confirmButtonText: 'OK'
         });
 
-        // Limpar formulário
-        document.getElementById('registerForm').reset();
-        
         // Mostrar formulário de login
         showLoginForm();
-        
+
     } catch (error) {
-        showErrorMessage(error.message);
+        await Swal.fire({
+            title: 'Erro no cadastro',
+            text: error.message,
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
     }
 }
 
@@ -706,29 +562,56 @@ async function handleLoginSubmit(event) {
 
         if (error) {
             if (error.message.includes('Email not confirmed')) {
-                showErrorMessage('Por favor, confirme seu email antes de fazer login. Verifique sua caixa de entrada.');
+                await Swal.fire({
+                    title: 'Email não confirmado',
+                    text: 'Por favor, confirme seu email antes de fazer login. Verifique sua caixa de entrada.',
+                    icon: 'warning',
+                    confirmButtonText: 'OK'
+                });
             } else {
-                showErrorMessage(error.message);
+                await Swal.fire({
+                    title: 'Erro no login',
+                    text: error.message,
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
             }
             return;
         }
 
         // Fechar modal de login
-        closeLoginModal();
-        
+        const loginModal = document.getElementById('loginModal');
+        if (loginModal) {
+            loginModal.style.display = 'none';
+        }
+
         // Atualizar UI
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', data.user.id)
-            .single();
-            
         updateUIForLoggedUser(data.user);
-        
+
     } catch (error) {
-        showErrorMessage(error.message);
+        await Swal.fire({
+            title: 'Erro no login',
+            text: error.message,
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
     }
 }
+
+// Event listeners para os formulários
+document.getElementById('registerForm').addEventListener('submit', handleRegisterSubmit);
+document.getElementById('loginForm').addEventListener('submit', handleLoginSubmit);
+
+// Event listeners para alternar entre formulários
+document.getElementById('showRegister').addEventListener('click', (e) => {
+    e.preventDefault();
+    showRegisterForm();
+});
+
+document.getElementById('showLogin').addEventListener('click', (e) => {
+    e.preventDefault();
+    showLoginForm();
+});
 
 // Handlers de mouse
 function handleMouseDown(e) {
