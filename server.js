@@ -29,6 +29,8 @@ app.post('/create-checkout-session', async (req, res) => {
     try {
         const { pixelCount, totalValue } = req.body;
         
+        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+        
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [
@@ -45,8 +47,8 @@ app.post('/create-checkout-session', async (req, res) => {
                 },
             ],
             mode: 'payment',
-            success_url: `${req.protocol}://${req.get('host')}/success.html?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${req.protocol}://${req.get('host')}/cancel.html`,
+            success_url: `${baseUrl}/success.html?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${baseUrl}/cancel.html`,
         });
 
         res.json({ id: session.id });
