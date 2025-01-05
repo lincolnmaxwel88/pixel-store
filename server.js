@@ -6,7 +6,13 @@ require('dotenv').config();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const app = express();
 
-app.use(cors());
+// Configurar CORS
+app.use(cors({
+    origin: ['http://localhost:3001', 'https://pixel-store.onrender.com'],
+    methods: ['GET', 'POST'],
+    credentials: true
+}));
+
 app.use(express.json());
 app.use(express.static(__dirname));
 
@@ -29,8 +35,6 @@ app.post('/create-checkout-session', async (req, res) => {
     try {
         const { pixelCount, totalValue } = req.body;
         
-        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
-        
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [
@@ -47,8 +51,8 @@ app.post('/create-checkout-session', async (req, res) => {
                 },
             ],
             mode: 'payment',
-            success_url: `${baseUrl}/success.html?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${baseUrl}/cancel.html`,
+            success_url: `${req.protocol}://${req.get('host')}/success.html?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${req.protocol}://${req.get('host')}/cancel.html`,
         });
 
         res.json({ id: session.id });

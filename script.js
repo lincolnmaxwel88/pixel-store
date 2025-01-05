@@ -823,7 +823,7 @@ async function handlePurchase() {
             localStorage.setItem('pendingPurchase', JSON.stringify(purchaseInfo));
 
             // Criar sessão de checkout no Stripe
-            const response = await fetch(`${window.location.protocol}//${window.location.host}/create-checkout-session`, {
+            const response = await fetch(`${getApiBaseUrl()}/create-checkout-session`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1597,4 +1597,14 @@ document.addEventListener('DOMContentLoaded', () => {
 // Carregar Stripe
 function loadStripe(key) {
     return window.Stripe(key);
+}
+
+// Função para obter a URL base da API
+function getApiBaseUrl() {
+    // Se estiver em produção (Render), usa a URL do Render
+    if (window.location.hostname === 'pixel-store.onrender.com') {
+        return 'https://pixel-store.onrender.com';
+    }
+    // Se estiver em desenvolvimento local, usa localhost
+    return 'http://localhost:3001';
 }
