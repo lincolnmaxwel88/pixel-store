@@ -319,31 +319,36 @@ async function loadPurchases() {
 }
 
 // Registrar uma nova compra
-async function registerPurchase(pixelCount, pricePerPixel, totalValue, pixelId) {
+async function registerPurchase(purchaseData, sessionId) {
     try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            throw new Error('Usuário não autenticado');
-        }
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
 
-        // Converter valores para o formato correto
         const purchase = {
-            user_id: user.id,
-            pixel_id: parseInt(pixelId), // Garantir que é um número
-            pixel_count: parseInt(pixelCount),
-            price_per_pixel: parseFloat(pricePerPixel),
-            total_value: parseFloat(totalValue),
-            purchase_date: new Date().toISOString()
+            user_id: userData.user.id,
+            x: purchaseData.x,
+            y: purchaseData.y,
+            width: purchaseData.width,
+            height: purchaseData.height,
+            image_data: purchaseData.imageBase64,
+            pixel_count: purchaseData.pixelCount,
+            total_value: purchaseData.totalValue,
+            payment_id: sessionId,
+            price_per_pixel: purchaseData.pricePerPixel
         };
 
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('purchases')
-            .insert(purchase);
+            .insert([purchase])
+            .select()
+            .single();
 
         if (error) {
-            console.error('Erro detalhado ao registrar compra:', error);
+            console.error('Erro detalhado ao finalizar compra:', error);
             throw error;
         }
+
+        return data;
     } catch (error) {
         console.error('Erro ao registrar compra:', error);
         throw error;
@@ -933,7 +938,8 @@ async function handlePurchase() {
                 height: pixelHeight,
                 imageBase64: e.target.result,
                 pixelCount,
-                totalValue
+                totalValue,
+                pricePerPixel
             };
             localStorage.setItem('pendingPurchase', JSON.stringify(purchaseInfo));
 
@@ -976,86 +982,37 @@ async function handlePurchase() {
 
 // Função para verificar o status do pagamento e finalizar a compra
 async function checkPaymentAndFinalizePurchase(sessionId) {
-    console.log('Iniciando verificação de pagamento...', sessionId);
     try {
-        const response = await fetch(`http://localhost:3001/check-payment/${sessionId}`);
-        const data = await response.json();
-        console.log('Status do pagamento:', data);
-
-        if (data.status === 'paid') {
-            console.log('Pagamento confirmado, recuperando dados da compra...');
-            // Recuperar informações da compra
-            const purchaseInfoStr = localStorage.getItem('pendingPurchase');
-            console.log('Dados da compra:', purchaseInfoStr);
-            
-            if (!purchaseInfoStr) {
-                throw new Error('Informações da compra não encontradas');
-            }
-
-            const purchaseInfo = JSON.parse(purchaseInfoStr);
-            console.log('Dados da compra parseados:', purchaseInfo);
-
-            // Converter base64 de volta para File
-            const response = await fetch(purchaseInfo.imageBase64);
-            const blob = await response.blob();
-            const file = new File([blob], 'image.png', { type: 'image/png' });
-
-            // Redimensionar imagem
-            console.log('Carregando imagem...');
-            const img = await loadImage(file);
-            console.log('Redimensionando imagem...');
-            const resizedImageBlob = await resizeImage(img, purchaseInfo.width, purchaseInfo.height);
-            const resizedFile = new File([resizedImageBlob], 'image.png', {
-                type: 'image/png'
-            });
-
-            // Upload da imagem
-            console.log('Fazendo upload da imagem...');
-            const { data: imageData, error: imageError } = await uploadImage(resizedFile);
-            if (imageError) {
-                console.error('Erro no upload:', imageError);
-                throw imageError;
-            }
-            console.log('Upload concluído:', imageData);
-
-            // Salvar pixels no banco
-            console.log('Salvando pixels...');
-            const { error: pixelError } = await savePixels(
-                purchaseInfo.x,
-                purchaseInfo.y,
-                purchaseInfo.width,
-                purchaseInfo.height,
-                imageData.path,
-                purchaseInfo.userId
-            );
-            if (pixelError) {
-                console.error('Erro ao salvar pixels:', pixelError);
-                throw pixelError;
-            }
-            console.log('Pixels salvos com sucesso');
-
-            // Registrar a compra
-            console.log('Registrando compra...');
-            await registerPurchase(
-                purchaseInfo.pixelCount,
-                currentPixelPrice,
-                purchaseInfo.totalValue,
-                imageData.id
-            );
-            console.log('Compra registrada com sucesso');
-
-            // Limpar dados temporários
-            localStorage.removeItem('pendingPurchase');
-
-            // Recarregar a página para garantir um estado limpo
-            window.location.reload();
+        // Recuperar dados da compra do localStorage
+        const purchaseData = JSON.parse(localStorage.getItem('pendingPurchase'));
+        if (!purchaseData) {
+            throw new Error('Dados da compra não encontrados');
         }
 
-        return false;
+        // Registrar a compra no Supabase
+        await registerPurchase(purchaseData, sessionId);
+
+        // Limpar dados do localStorage
+        localStorage.removeItem('pendingPurchase');
+
+        // Mostrar mensagem de sucesso
+        await Swal.fire({
+            title: 'Compra Finalizada!',
+            text: 'Sua compra foi processada com sucesso.',
+            icon: 'success',
+            confirmButtonText: 'OK'
+        });
+
+        // Redirecionar para a página principal
+        window.location.href = '/';
     } catch (error) {
-        console.error('Erro detalhado ao finalizar compra:', error);
-        alert('Erro ao finalizar compra. Por favor, contate o suporte.');
-        return false;
+        console.error('Erro ao finalizar compra:', error);
+        await Swal.fire({
+            title: 'Erro',
+            text: 'Ocorreu um erro ao finalizar sua compra. Por favor, tente novamente.',
+            icon: 'error',
+            confirmButtonText: 'OK'
+        });
     }
 }
 
