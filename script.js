@@ -842,8 +842,13 @@ async function handlePurchase() {
             };
             localStorage.setItem('pendingPurchase', JSON.stringify(purchaseInfo));
 
+            // URL base baseada no ambiente
+            const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                ? 'http://localhost:3001'
+                : 'https://pixel-store.onrender.com';
+
             // Criar sessão de checkout no Stripe
-            const response = await fetch('http://localhost:3001/create-checkout-session', {
+            const response = await fetch(`${baseUrl}/create-checkout-session`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -883,7 +888,12 @@ async function handlePurchase() {
 async function checkPaymentAndFinalizePurchase(sessionId) {
     console.log('Iniciando verificação de pagamento...', sessionId);
     try {
-        const response = await fetch(`http://localhost:3001/check-payment/${sessionId}`);
+        // URL base baseada no ambiente
+        const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3001'
+            : 'https://pixel-store.onrender.com';
+
+        const response = await fetch(`${baseUrl}/check-payment/${sessionId}`);
         const data = await response.json();
         console.log('Status do pagamento:', data);
 
@@ -1242,50 +1252,89 @@ function hideInfoBox() {
 async function checkAuthState() {
     try {
         console.log('Verificando estado de autenticação...');
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
         
-        if (authError) {
-            console.error('Erro ao verificar autenticação:', authError);
+        if (user) {
+            console.log('Usuário encontrado:', user);
+
+            // Verificar se o email está confirmado
+            if (!user.email_confirmed_at) {
+                console.log('Email não confirmado');
+                alert('Seu email ainda não foi confirmado. Por favor, confirme seu email para manter sua sessão ativa. Verifique sua caixa de entrada.');
+                await supabase.auth.signOut();
+                updateUIForLoggedOutUser();
+                return;
+            }
+
+            // Buscar perfil do usuário
+            const { data: profiles, error: profileError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id);
+
+            if (profileError) {
+                console.error('Erro ao buscar perfil:', profileError);
+                throw profileError;
+            }
+
+            const profile = profiles && profiles[0];
+            
+            if (!profile) {
+                console.error('Perfil não encontrado para usuário:', user.id);
+                throw new Error('Perfil não encontrado');
+            }
+
+            console.log('Perfil encontrado:', profile);
+
+            // Atualizar UI com os dados do perfil
+            currentUser = user;
+            updateUIForLoggedUser(profile);
+            
+        } else {
+            console.log('Nenhum usuário logado');
             updateUIForLoggedOutUser();
-            return;
         }
-
-        if (!user) {
-            console.log('Nenhum usuário autenticado');
-            updateUIForLoggedOutUser();
-            return;
-        }
-
-        console.log('Usuário autenticado:', user);
-
-        // Buscar o perfil pelo email em vez do ID
-        const { data: profiles, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('email', user.email);
-
-        if (profileError) {
-            console.error('Erro ao buscar perfil:', profileError);
-            updateUIForLoggedOutUser();
-            return;
-        }
-
-        const profile = profiles && profiles[0];
-        
-        if (!profile) {
-            console.error('Perfil não encontrado para o email:', user.email);
-            updateUIForLoggedOutUser();
-            return;
-        }
-
-        console.log('Perfil encontrado:', profile);
-
-        // Atualizar UI com os dados do perfil
-        currentUser = user;
-        updateUIForLoggedUser(profile);
-        
     } catch (error) {
         console.error('Erro ao verificar estado:', error);
+        updateUIForLoggedOutUser();
+    }
+}
+
+// Atualizar UI para usuário logado
+async function updateUIForLoggedUser(profile) {
+    try {
+        // Verificar novamente se o usuário está com email confirmado
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && !user.email_confirmed_at) {
+            console.log('Email não confirmado durante atualização da UI');
+            alert('Seu email ainda não foi confirmado. Por favor, confirme seu email para manter sua sessão ativa.');
+            await supabase.auth.signOut();
+            updateUIForLoggedOutUser();
+            return;
+        }
+
+        // Atualizar menu do usuário
+        const userMenu = document.querySelector('.user-menu');
+        const loginButton = document.querySelector('.login-button');
+        const userName = document.querySelector('.user-name');
+        const userEmail = document.querySelector('.user-email');
+        const adminSettingsButton = document.querySelector('.admin-settings-button');
+
+        if (userMenu && loginButton && userName && userEmail) {
+            loginButton.style.display = 'none';
+            userMenu.style.display = 'block';
+            userName.textContent = `${profile.first_name} ${profile.last_name}`;
+            userEmail.textContent = profile.email;
+
+            // Exibir ou ocultar botão de Admin Settings baseado no perfil
+            if (adminSettingsButton) {
+                adminSettingsButton.style.display = profile.admin ? 'block' : 'none';
+            }
+        }
+
+        currentUser = user;
+    } catch (error) {
+        console.error('Erro ao atualizar UI:', error);
         updateUIForLoggedOutUser();
     }
 }
@@ -1436,43 +1485,6 @@ function hideLinkModal() {
     linkModal.classList.remove('show');
     linkInput.value = '';
     editingPixelId = null;
-}
-
-// Atualizar UI para usuário logado
-async function updateUIForLoggedUser(user) {
-    try {
-        // Buscar perfil do usuário
-        const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
-
-        if (error) throw error;
-
-        // Atualizar menu do usuário
-        const userMenu = document.querySelector('.user-menu');
-        const loginButton = document.querySelector('.login-button');
-        const userName = document.querySelector('.user-name');
-        const userEmail = document.querySelector('.user-email');
-        const adminSettingsButton = document.querySelector('.admin-settings-button');
-
-        if (userMenu && loginButton && userName && userEmail) {
-            loginButton.style.display = 'none';
-            userMenu.style.display = 'block';
-            userName.textContent = `${profile.first_name} ${profile.last_name}`;
-            userEmail.textContent = user.email;
-
-            // Exibir ou ocultar botão de Admin Settings baseado no perfil
-            if (adminSettingsButton) {
-                adminSettingsButton.style.display = profile.admin ? 'block' : 'none';
-            }
-        }
-
-        currentUser = user;
-    } catch (error) {
-        console.error('Erro ao atualizar UI:', error);
-    }
 }
 
 // Atualizar UI para usuário deslogado
