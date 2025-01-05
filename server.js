@@ -6,13 +6,7 @@ require('dotenv').config();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const app = express();
 
-// Configurar CORS
-app.use(cors({
-    origin: ['http://localhost:3001', 'https://pixel-store.onrender.com'],
-    methods: ['GET', 'POST'],
-    credentials: true
-}));
-
+app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 

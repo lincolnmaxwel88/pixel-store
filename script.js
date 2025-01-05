@@ -11,6 +11,11 @@ const COLS = GRID_WIDTH / PIXEL_SIZE;
 const ROWS = GRID_HEIGHT / PIXEL_SIZE;
 const PIXEL_PRICE = 0.1; // R$ 0,10 por pixel
 
+// URL base da API
+const BASE_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:3001'
+    : 'https://pixel-store.onrender.com';
+
 // Estado global
 let selectedPixels = [];
 let isSelecting = false;
@@ -784,30 +789,20 @@ async function handlePurchase() {
             return;
         }
 
-        // 4. Obter dimensões da seleção
-        const selection = selectedPixels[0];
-        const gridX = selection.left;
-        const gridY = selection.top;
-        const pixelWidth = selection.width;
-        const pixelHeight = selection.height;
+        // Calcular dimensões em pixels do grid
+        const gridX = selectedPixels[0].x;
+        const gridY = selectedPixels[0].y;
+        const pixelWidth = Math.max(...selectedPixels.map(p => p.x)) - gridX + PIXEL_SIZE;
+        const pixelHeight = Math.max(...selectedPixels.map(p => p.y)) - gridY + PIXEL_SIZE;
 
-        // 5. Verificar se área está disponível
-        if (hasAnyPurchasedPixelsInArea(gridX, gridY, pixelWidth, pixelHeight)) {
-            alert('Alguns pixels nesta área já foram comprados. Por favor, selecione outra área.');
-            return;
-        }
-
-        // 6. Calcular preço
         const pixelCount = Math.floor((pixelWidth * pixelHeight) / 100);
-        const pricePerPixel = currentPixelPrice; // Preço atual do Admin Settings
+        const pricePerPixel = currentPixelPrice;
         const totalValue = pixelCount * pricePerPixel;
 
-        // 7. Confirmar compra
         if (!confirm(`Confirmar compra de ${pixelCount} pixels por R$ ${totalValue.toFixed(2)}?`)) {
             return;
         }
 
-        // Guardar informações da compra temporariamente
         const reader = new FileReader();
         reader.onload = async function(e) {
             const purchaseInfo = {
@@ -822,8 +817,8 @@ async function handlePurchase() {
             };
             localStorage.setItem('pendingPurchase', JSON.stringify(purchaseInfo));
 
-            // Criar sessão de checkout no Stripe
-            const response = await fetch(`${getApiBaseUrl()}/create-checkout-session`, {
+            // Criar sessão de checkout no Stripe usando a URL base
+            const response = await fetch(`${BASE_URL}/create-checkout-session`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -839,10 +834,8 @@ async function handlePurchase() {
                 throw new Error('Não foi possível criar a sessão de checkout');
             }
 
-            // Carregar o Stripe.js
             const stripe = await loadStripe('pk_test_51QbVcLKxtlwVKoGi1mssIKeOby7ZtYayRV9ZdE9aXJkbeK00RKHbExzi8lvcnuomDOhdNoJFoh5lCmV3MwTKBLWV00KRz3Fpue');
             
-            // Redirecionar para o checkout
             const { error } = await stripe.redirectToCheckout({
                 sessionId: id
             });
@@ -863,7 +856,7 @@ async function handlePurchase() {
 async function checkPaymentAndFinalizePurchase(sessionId) {
     console.log('Iniciando verificação de pagamento...', sessionId);
     try {
-        const response = await fetch(`http://localhost:3001/check-payment/${sessionId}`);
+        const response = await fetch(`${BASE_URL}/check-payment/${sessionId}`);
         const data = await response.json();
         console.log('Status do pagamento:', data);
 
@@ -1221,53 +1214,43 @@ function hideInfoBox() {
 // Verificar estado de autenticação
 async function checkAuthState() {
     try {
-        console.log('Verificando estado de autenticação...');
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (authError) {
-            console.error('Erro ao verificar autenticação:', authError);
-            updateUIForLoggedOutUser();
-            return;
+        if (error) {
+            throw error;
         }
 
-        if (!user) {
-            console.log('Nenhum usuário autenticado');
+        if (session) {
+            const { data: profiles, error: profileError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', session.user.id);
+
+            if (profileError) {
+                throw profileError;
+            }
+
+            if (profiles && profiles.length > 0) {
+                currentUser = session.user;
+                updateUIForLoggedUser(session.user);
+            }
+        } else {
             updateUIForLoggedOutUser();
-            return;
         }
-
-        console.log('Usuário autenticado:', user);
-
-        // Buscar o perfil pelo email em vez do ID
-        const { data: profiles, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('email', user.email);
-
-        if (profileError) {
-            console.error('Erro ao buscar perfil:', profileError);
-            updateUIForLoggedOutUser();
-            return;
-        }
-
-        const profile = profiles && profiles[0];
-        
-        if (!profile) {
-            console.error('Perfil não encontrado para o email:', user.email);
-            updateUIForLoggedOutUser();
-            return;
-        }
-
-        console.log('Perfil encontrado:', profile);
-        
-        // Atualizar UI com os dados do perfil
-        currentUser = user;
-        updateUIForLoggedUser(profile);
     } catch (error) {
-        console.error('Erro ao verificar estado:', error);
+        console.error('Erro ao verificar autenticação:', error);
         updateUIForLoggedOutUser();
     }
 }
+
+// Adicionar listener para mudanças na autenticação
+supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN') {
+        checkAuthState();
+    } else if (event === 'SIGNED_OUT') {
+        updateUIForLoggedOutUser();
+    }
+});
 
 // Logout
 async function handleLogout() {
@@ -1597,14 +1580,4 @@ document.addEventListener('DOMContentLoaded', () => {
 // Carregar Stripe
 function loadStripe(key) {
     return window.Stripe(key);
-}
-
-// Função para obter a URL base da API
-function getApiBaseUrl() {
-    // Se estiver em produção (Render), usa a URL do Render
-    if (window.location.hostname === 'pixel-store.onrender.com') {
-        return 'https://pixel-store.onrender.com';
-    }
-    // Se estiver em desenvolvimento local, usa localhost
-    return 'http://localhost:3001';
 }
