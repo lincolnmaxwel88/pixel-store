@@ -586,27 +586,142 @@ async function handleRegister(event) {
             throw profileError;
         }
         
-        // Mostrar mensagem de sucesso e instruções
-        alert('Cadastro realizado com sucesso! Um email de confirmação foi enviado para ' + email + '. Por favor, verifique sua caixa de entrada e confirme seu email antes de fazer login.');
+        // Login automático
+        const { data: { session }, error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
         
-        // Limpar formulário de registro
-        document.getElementById('registerForm').reset();
+        if (signInError) {
+            throw signInError;
+        }
         
-        // Mostrar formulário de login
-        document.getElementById('registerForm').style.display = 'none';
-        document.getElementById('loginForm').style.display = 'block';
+        // Atualizar UI
+        alert('Registro realizado com sucesso!');
+        loginModal.classList.remove('show');
+        currentUser = user;
+        updateUIForLoggedUser({
+            first_name: firstName,
+            last_name: lastName,
+            email: email
+        });
         
     } catch (error) {
         console.error('Erro completo:', error);
+        alert('Erro no registro: ' + error.message);
         
         if (error.message.includes('já está cadastrado')) {
-            alert(error.message);
             // Mostrar formulário de login
             document.getElementById('registerForm').style.display = 'none';
             document.getElementById('loginForm').style.display = 'block';
-        } else {
-            alert('Erro no registro: ' + error.message);
         }
+    }
+}
+
+// Função para mostrar mensagem de sucesso
+function showSuccessMessage(message) {
+    Swal.fire({
+        title: 'Sucesso!',
+        text: message,
+        icon: 'success',
+        confirmButtonText: 'OK'
+    });
+}
+
+// Função para mostrar mensagem de erro
+function showErrorMessage(message) {
+    Swal.fire({
+        title: 'Erro',
+        text: message,
+        icon: 'error',
+        confirmButtonText: 'OK'
+    });
+}
+
+// Manipular envio do formulário de registro
+async function handleRegisterSubmit(event) {
+    event.preventDefault();
+    
+    const firstName = document.getElementById('registerFirstName').value;
+    const lastName = document.getElementById('registerLastName').value;
+    const email = document.getElementById('registerEmail').value;
+    const password = document.getElementById('registerPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+
+    if (password !== confirmPassword) {
+        showErrorMessage('As senhas não coincidem');
+        return;
+    }
+
+    try {
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: {
+                    first_name: firstName,
+                    last_name: lastName
+                }
+            }
+        });
+
+        if (error) throw error;
+
+        // Mostrar mensagem de sucesso e instruções
+        await Swal.fire({
+            title: 'Cadastro Realizado!',
+            text: 'Um email de confirmação foi enviado para o seu endereço. Por favor, verifique sua caixa de entrada e confirme seu email antes de fazer login.',
+            icon: 'success',
+            confirmButtonText: 'OK'
+        });
+
+        // Limpar formulário
+        document.getElementById('registerForm').reset();
+        
+        // Mostrar formulário de login
+        showLoginForm();
+        
+    } catch (error) {
+        showErrorMessage(error.message);
+    }
+}
+
+// Manipular envio do formulário de login
+async function handleLoginSubmit(event) {
+    event.preventDefault();
+    
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+
+    try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (error) {
+            if (error.message.includes('Email not confirmed')) {
+                showErrorMessage('Por favor, confirme seu email antes de fazer login. Verifique sua caixa de entrada.');
+            } else {
+                showErrorMessage(error.message);
+            }
+            return;
+        }
+
+        // Fechar modal de login
+        closeLoginModal();
+        
+        // Atualizar UI
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', data.user.id)
+            .single();
+            
+        updateUIForLoggedUser(data.user);
+        
+    } catch (error) {
+        showErrorMessage(error.message);
     }
 }
 
